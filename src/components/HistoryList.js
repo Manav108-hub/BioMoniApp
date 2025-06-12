@@ -29,12 +29,12 @@ export default function HistoryList({ logs }) {
 
     Alert.alert(
       'Observation Details',
-      `Species: ${log.species.common_name}\nLocation: ${log.location_name}\nDate: ${formatDate(log.logged_at)}\n\nAnswers:\n${answersText}`,
+      `Species: ${log.species.common_name}\nLocation: ${log.location_name}\nDate: ${formatDate(log.created_at)}\n\nAnswers:\n${answersText}`,
       [{ text: 'OK' }]
     );
   };
 
-  if (logs.length === 0) {
+  if (!Array.isArray(logs) || logs.length === 0) {
     return (
       <View style={styles.emptyContainer}>
         <Icon name="search-off" size={64} color="#ccc" />
@@ -48,7 +48,7 @@ export default function HistoryList({ logs }) {
 
   return (
     <View style={styles.container}>
-      {logs.map((log, index) => (
+      {logs.map((log) => (
         <TouchableOpacity
           key={log.id}
           style={styles.logCard}
@@ -63,32 +63,26 @@ export default function HistoryList({ logs }) {
                 {log.species.scientific_name}
               </Text>
             </View>
-            
             <View style={styles.logDetails}>
               <View style={styles.detailRow}>
                 <Icon name="location-on" size={16} color="#666" />
                 <Text style={styles.detailText}>{log.location_name}</Text>
               </View>
-              
               <View style={styles.detailRow}>
                 <Icon name="schedule" size={16} color="#666" />
                 <Text style={styles.detailText}>
-                  {formatDate(log.logged_at)}
+                  {formatDate(log.created_at)}
                 </Text>
               </View>
-              
-              {log.image_url && (
-                <View style={styles.imageContainer}>
-                  <Image 
-                    source={{ uri: log.image_url }} 
-                    style={styles.logImage}
-                    resizeMode="cover"
-                  />
-                </View>
+              {log.photo_path && (
+                <Image
+                  source={{ uri: log.photo_path }}
+                  style={styles.logImage}
+                  resizeMode="cover"
+                />
               )}
             </View>
           </View>
-          
           <Icon name="chevron-right" size={24} color="#ccc" />
         </TouchableOpacity>
       ))}
@@ -161,12 +155,10 @@ const styles = StyleSheet.create({
     color: '#666',
     flex: 1,
   },
-  imageContainer: {
-    marginTop: 10,
-  },
   logImage: {
     width: 60,
     height: 60,
     borderRadius: 8,
+    marginTop: 10,
   },
 });

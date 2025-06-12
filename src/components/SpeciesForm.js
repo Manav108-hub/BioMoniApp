@@ -1,3 +1,4 @@
+// components/SpeciesForm.js
 import React, { useState } from 'react';
 import {
   View,
@@ -30,10 +31,7 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
     };
 
     launchImageLibrary(options, (response) => {
-      if (response.didCancel || response.error) {
-        return;
-      }
-
+      if (response.didCancel || response.error) return;
       if (response.assets && response.assets[0]) {
         setImage(response.assets[0]);
       }
@@ -41,10 +39,7 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
   };
 
   const handleAnswerChange = (questionId, value) => {
-    setAnswers(prev => ({
-      ...prev,
-      [questionId]: value,
-    }));
+    setAnswers(prev => ({ ...prev, [questionId]: value }));
   };
 
   const handleSubmit = async () => {
@@ -56,7 +51,7 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
     setLoading(true);
     try {
       const logData = {
-        species_id: parseInt(selectedSpecies),
+        species_id: parseInt(selectedSpecies, 10),
         location_name: locationName,
         latitude: parseFloat(latitude) || 0,
         longitude: parseFloat(longitude) || 0,
@@ -65,7 +60,7 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
       };
 
       await onSubmit(logData);
-      
+
       // Reset form
       setSelectedSpecies('');
       setLocationName('');
@@ -73,9 +68,9 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
       setLongitude('');
       setAnswers({});
       setImage(null);
-      
     } catch (error) {
       console.error('Error submitting form:', error);
+      Alert.alert('Error', 'Could not submit observation');
     } finally {
       setLoading(false);
     }
@@ -88,9 +83,9 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
           <View key={question.id} style={styles.questionContainer}>
             <Text style={styles.questionText}>{question.question_text}</Text>
             <View style={styles.optionsContainer}>
-              {question.options.map((option, index) => (
+              {question.options.map((option, idx) => (
                 <TouchableOpacity
-                  key={index}
+                  key={idx}
                   style={[
                     styles.optionButton,
                     answers[question.id] === option && styles.selectedOption,
@@ -110,7 +105,6 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
             </View>
           </View>
         );
-
       case 'text':
         return (
           <View key={question.id} style={styles.questionContainer}>
@@ -120,12 +114,11 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
               multiline
               numberOfLines={3}
               value={answers[question.id] || ''}
-              onChangeText={(text) => handleAnswerChange(question.id, text)}
+              onChangeText={text => handleAnswerChange(question.id, text)}
               placeholder="Enter your answer..."
             />
           </View>
         );
-
       case 'number':
         return (
           <View key={question.id} style={styles.questionContainer}>
@@ -134,12 +127,11 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
               style={styles.numberInput}
               keyboardType="numeric"
               value={answers[question.id]?.toString() || ''}
-              onChangeText={(text) => handleAnswerChange(question.id, parseInt(text) || 0)}
+              onChangeText={text => handleAnswerChange(question.id, parseInt(text, 10) || 0)}
               placeholder="Enter number..."
             />
           </View>
         );
-
       case 'yes_no':
         return (
           <View key={question.id} style={styles.questionContainer}>
@@ -180,7 +172,6 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
             </View>
           </View>
         );
-
       default:
         return null;
     }
@@ -189,55 +180,51 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
   return (
     <View style={styles.container}>
       <View style={styles.formSection}>
-        <Text style={styles.sectionTitle}>Basic Information</Text>
-        
-        {/* Species Selection */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Species *</Text>
-          <View style={styles.speciesContainer}>
-            {species.map((sp) => (
-              <TouchableOpacity
-                key={sp.id}
+        <Text style={styles.sectionTitle}>Species</Text>
+        <View style={styles.speciesContainer}>
+          {species.map((s) => (
+            <TouchableOpacity
+              key={s.id}
+              style={[
+                styles.speciesButton,
+                selectedSpecies === s.id.toString() && styles.selectedSpecies,
+              ]}
+              onPress={() => setSelectedSpecies(s.id.toString())}
+            >
+              <Text
                 style={[
-                  styles.speciesButton,
-                  selectedSpecies === sp.id.toString() && styles.selectedSpecies,
+                  styles.speciesText,
+                  selectedSpecies === s.id.toString() && styles.selectedSpeciesText,
                 ]}
-                onPress={() => setSelectedSpecies(sp.id.toString())}
               >
-                <Text
-                  style={[
-                    styles.speciesText,
-                    selectedSpecies === sp.id.toString() && styles.selectedSpeciesText,
-                  ]}
-                >
-                  {sp.common_name}
-                </Text>
-                <Text style={styles.scientificName}>{sp.scientific_name}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+                {s.common_name}
+              </Text>
+              <Text style={styles.scientificName}>{s.scientific_name}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
+      </View>
 
-        {/* Location */}
+      <View style={styles.formSection}>
+        <Text style={styles.sectionTitle}>Location</Text>
         <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Location Name *</Text>
+          <Text style={styles.fieldLabel}>Location Name</Text>
           <TextInput
             style={styles.input}
             value={locationName}
             onChangeText={setLocationName}
-            placeholder="e.g., Central Park, NYC"
+            placeholder="Enter location name"
           />
         </View>
-
-        <View style={styles.coordinatesRow}>
+        <View style={[styles.coordinatesRow]}>
           <View style={styles.coordinateField}>
             <Text style={styles.fieldLabel}>Latitude</Text>
             <TextInput
               style={styles.input}
               value={latitude}
               onChangeText={setLatitude}
-              placeholder="0.0"
               keyboardType="numeric"
+              placeholder="Latitude"
             />
           </View>
           <View style={styles.coordinateField}>
@@ -246,55 +233,47 @@ export default function SpeciesForm({ species, questions, onSubmit }) {
               style={styles.input}
               value={longitude}
               onChangeText={setLongitude}
-              placeholder="0.0"
               keyboardType="numeric"
+              placeholder="Longitude"
             />
           </View>
         </View>
-
-        {/* Image Upload */}
-        <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Photo (Optional)</Text>
-          <TouchableOpacity style={styles.imageButton} onPress={handleImagePick}>
-            {image ? (
-              <Image source={{ uri: image.uri }} style={styles.selectedImage} />
-            ) : (
-              <View style={styles.imagePlaceholder}>
-                <Icon name="camera-alt" size={32} color="#666" />
-                <Text style={styles.imageButtonText}>Add Photo</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-        </View>
       </View>
 
-      {/* Questions */}
+      <View style={styles.formSection}>
+        <Text style={styles.sectionTitle}>Photo</Text>
+        <TouchableOpacity style={styles.imageButton} onPress={handleImagePick}>
+          {image ? (
+            <Image source={{ uri: image.uri }} style={styles.selectedImage} />
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Icon name="photo-camera" size={30} color="#666" />
+              <Text style={styles.imageButtonText}>Pick an image</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.formSection}>
         <Text style={styles.sectionTitle}>Observation Details</Text>
         {questions.map(renderQuestion)}
       </View>
 
-      {/* Submit Button */}
       <TouchableOpacity
         style={[styles.submitButton, loading && styles.disabledButton]}
         onPress={handleSubmit}
         disabled={loading}
       >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitButtonText}>Submit Observation</Text>
-        )}
+        {loading
+          ? <ActivityIndicator color="#fff" />
+          : <Text style={styles.submitButtonText}>Submit Observation</Text>}
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 15,
-  },
+  container: { flex: 1, padding: 15 },
   formSection: {
     backgroundColor: '#fff',
     borderRadius: 10,
@@ -312,9 +291,7 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 20,
   },
-  fieldContainer: {
-    marginBottom: 20,
-  },
+  fieldContainer: { marginBottom: 20 },
   fieldLabel: {
     fontSize: 16,
     fontWeight: '500',
@@ -329,41 +306,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#f9f9f9',
   },
-  speciesContainer: {
-    gap: 10,
-  },
+  speciesContainer: { gap: 10 },
   speciesButton: {
     padding: 15,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
     backgroundColor: '#f9f9f9',
+    marginBottom: 10,
   },
   selectedSpecies: {
     borderColor: '#2e7d32',
     backgroundColor: '#e8f5e8',
   },
-  speciesText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  selectedSpeciesText: {
-    color: '#2e7d32',
-  },
+  speciesText: { fontSize: 16, fontWeight: '500', color: '#333' },
+  selectedSpeciesText: { color: '#2e7d32' },
   scientificName: {
     fontSize: 14,
     fontStyle: 'italic',
     color: '#666',
     marginTop: 2,
   },
-  coordinatesRow: {
-    flexDirection: 'row',
-    gap: 15,
-  },
-  coordinateField: {
-    flex: 1,
-  },
+  coordinatesRow: { flexDirection: 'row', gap: 15 },
+  coordinateField: { flex: 1 },
   imageButton: {
     borderWidth: 2,
     borderColor: '#ddd',
@@ -373,31 +338,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f9f9f9',
   },
-  imagePlaceholder: {
-    alignItems: 'center',
-  },
+  imagePlaceholder: { alignItems: 'center' },
   imageButtonText: {
     marginTop: 8,
     color: '#666',
     fontSize: 16,
   },
-  selectedImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-  },
-  questionContainer: {
-    marginBottom: 25,
-  },
+  selectedImage: { width: 100, height: 100, borderRadius: 8 },
+  questionContainer: { marginBottom: 25 },
   questionText: {
     fontSize: 16,
     fontWeight: '500',
     color: '#333',
     marginBottom: 12,
   },
-  optionsContainer: {
-    gap: 8,
-  },
+  optionsContainer: { gap: 8 },
   optionButton: {
     padding: 12,
     borderWidth: 1,
@@ -409,10 +364,7 @@ const styles = StyleSheet.create({
     borderColor: '#2e7d32',
     backgroundColor: '#e8f5e8',
   },
-  optionText: {
-    fontSize: 14,
-    color: '#333',
-  },
+  optionText: { fontSize: 14, color: '#333' },
   selectedOptionText: {
     color: '#2e7d32',
     fontWeight: '500',
@@ -434,10 +386,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: '#f9f9f9',
   },
-  yesNoContainer: {
-    flexDirection: 'row',
-    gap: 15,
-  },
+  yesNoContainer: { flexDirection: 'row', gap: 15 },
   yesNoButton: {
     flex: 1,
     padding: 12,
@@ -451,10 +400,7 @@ const styles = StyleSheet.create({
     borderColor: '#2e7d32',
     backgroundColor: '#e8f5e8',
   },
-  yesNoText: {
-    fontSize: 16,
-    color: '#333',
-  },
+  yesNoText: { fontSize: 16, color: '#333' },
   selectedYesNoText: {
     color: '#2e7d32',
     fontWeight: '500',
@@ -468,9 +414,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 15,
     marginBottom: 30,
   },
-  disabledButton: {
-    opacity: 0.6,
-  },
+  disabledButton: { opacity: 0.6 },
   submitButtonText: {
     color: '#fff',
     fontSize: 18,

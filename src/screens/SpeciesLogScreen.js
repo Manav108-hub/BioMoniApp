@@ -13,7 +13,7 @@ import ApiService from '../services/api';
 
 export default function SpeciesLogScreen() {
   const [species, setSpecies] = useState([]);
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState([]);    // <-- array state
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,12 +22,10 @@ export default function SpeciesLogScreen() {
 
   const loadData = async () => {
     try {
-      const [speciesData, questionsData] = await Promise.all([
-        ApiService.getSpecies(),
-        ApiService.getQuestions(),
-      ]);
-      setSpecies(speciesData);
-      setQuestions(questionsData);
+      const { species: speciesArray }   = await ApiService.getSpecies();
+      const { questions: questionsArr } = await ApiService.getQuestions();
+      setSpecies(speciesArray);
+      setQuestions(questionsArr);       // <-- set the array
     } catch (error) {
       console.error('Error loading data:', error);
       Alert.alert('Error', 'Failed to load form data');

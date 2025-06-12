@@ -7,16 +7,22 @@ import {
   RefreshControl,
   TouchableOpacity,
   Alert,
+  Platform, // Import Platform for OS-specific file saving
+  PermissionsAndroid, // For Android permissions
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import ApiService from '../services/api';
-import { removeToken } from '../utils/storage';
+import { removeToken, getToken } from '../utils/storage'; // Import getToken for CSV download auth
+import RNFS from 'react-native-fs'; // Import react-native-fs for file operations
+import { useNavigation } from '@react-navigation/native'; // Import useNavigation hook
 
 export default function HomeScreen() {
+  const navigation = useNavigation(); // Get the navigation object
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false); // New state for admin status
 
   useEffect(() => {
     loadData();
@@ -24,15 +30,18 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     try {
-      const [profileData, statsData] = await Promise.all([
-        ApiService.getProfile(),
-        ApiService.getStats(),
-      ]);
-      setProfile(profileData);
+      // Fetch profile first, as it contains admin status
+      const profileData = await ApiService.getProfile();
+      setProfile(profileData.user); // Assuming backend returns {"user": {...}}
+      setIsAdmin(profileData.user?.is_admin || false); // Set admin status based on profile data
+
+      // Fetch stats after profile
+      const statsData = await ApiService.getStats();
       setStats(statsData);
+
     } catch (error) {
       console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load profile data');
+      Alert.alert('Error', 'Failed to load dashboard data.');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -56,12 +65,92 @@ export default function HomeScreen() {
           onPress: async () => {
             await removeToken();
             // The app will automatically navigate to login screen
-            // due to the authentication check in App.js
+            // due to the authentication check in App.js (in App.js's useEffect)
           },
         },
       ]
     );
   };
+
+  const handleDownloadCsv = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        // Request storage permission for Android
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          {
+            title: 'Storage Permission Required',
+            message: 'This app needs access to your storage to download the CSV.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          Alert.alert('Permission Denied', 'Cannot download CSV without storage permission.');
+          return;
+        }
+      }
+
+      Alert.alert(
+        "Download All Logs",
+        "This will download a CSV file containing all species logs. Continue?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Download",
+            onPress: async () => {
+              try {
+                const token = await getToken(); // Get token for authorization
+                const baseUrl = ApiService.BASE_URL; // Access BASE_URL from ApiService
+                const csvEndpoint = `${baseUrl}/admin/export-csv`; // Your backend CSV endpoint
+
+                const rawResponse = await fetch(csvEndpoint, {
+                  method: 'GET',
+                  headers: {
+                    'Authorization': `Bearer ${token}`, // Include the authorization token
+                    'Accept': 'text/csv', // Tell the server we prefer CSV
+                  }
+                });
+
+                if (!rawResponse.ok) {
+                  // Attempt to parse error message if available, otherwise use status
+                  let errorBody = await rawResponse.text();
+                  try {
+                      const errorJson = JSON.parse(errorBody);
+                      errorBody = errorJson.detail || errorJson.message || errorBody;
+                  } catch (e) {
+                      // Fallback to raw text if not JSON
+                  }
+                  throw new Error(`Server responded with status ${rawResponse.status}: ${errorBody}`);
+                }
+
+                const csvContent = await rawResponse.text(); // Get the raw CSV content
+
+                const fileName = `biodiversity_logs_${new Date().toISOString().slice(0,10)}.csv`;
+                const path = Platform.select({
+                  ios: `${RNFS.DocumentDirectoryPath}/${fileName}`,
+                  android: `${RNFS.DownloadDirectoryPath}/${fileName}`, // Use DownloadDirectoryPath for Android
+                });
+
+                // Write the CSV content to the file
+                await RNFS.writeFile(path, csvContent, 'utf8');
+
+                Alert.alert('Download Complete', `CSV saved to: ${path}`);
+              } catch (downloadError) {
+                console.error('Error during CSV download:', downloadError);
+                Alert.alert('Download Failed', downloadError.message || 'Failed to download CSV.');
+              }
+            }
+          }
+        ]
+      );
+    } catch (permissionError) {
+      console.error('Storage permission error:', permissionError);
+      Alert.alert('Permission Error', 'Failed to get storage permission.');
+    }
+  };
+
 
   if (loading) {
     return (
@@ -104,14 +193,32 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* NEW: Admin Download Button - Conditionally rendered */}
+      {isAdmin && (
+        <View style={styles.adminSection}>
+          <Text style={styles.sectionTitle}>Admin Actions</Text>
+          <TouchableOpacity style={styles.actionCard} onPress={handleDownloadCsv}>
+            <Icon name="file-download" size={40} color="#2e7d32" />
+            <Text style={styles.actionText}>Download All Logs (CSV)</Text>
+            <Text style={styles.actionSubtext}>Export all observation data</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.quickActions}>
         <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <TouchableOpacity style={styles.actionCard}>
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('Log Species')} // Navigate to Log Species screen
+        >
           <Icon name="add-circle" size={40} color="#2e7d32" />
           <Text style={styles.actionText}>Log New Species</Text>
           <Text style={styles.actionSubtext}>Record a new observation</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionCard}>
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('History')} // Navigate to History screen
+        >
           <Icon name="history" size={40} color="#2e7d32" />
           <Text style={styles.actionText}>View History</Text>
           <Text style={styles.actionSubtext}>Browse past observations</Text>
@@ -226,4 +333,17 @@ const styles = StyleSheet.create({
     marginLeft: 15,
     flex: 1,
   },
+  adminSection: { // NEW STYLE FOR ADMIN SECTION
+    backgroundColor: '#fff',
+    margin: 10,
+    padding: 20,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderColor: '#ffc107', // Highlight for admin section
+    borderWidth: 1,
+  }
 });

@@ -11,23 +11,25 @@ import {
 export default function LoginForm({ onLogin, onRegister, loading }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');           // new
   const [password, setPassword] = useState('');
   const [adminSecret, setAdminSecret] = useState('');
 
   const handleSubmit = () => {
-    if (!username.trim() || !password.trim()) {
+    if (!username.trim() || !password.trim() || (!isLogin && !email.trim())) {
       return;
     }
 
     if (isLogin) {
       onLogin(username, password);
     } else {
-      onRegister(username, password, adminSecret || null);
+      onRegister(username, email, password, adminSecret || null);
     }
   };
 
   return (
     <View style={styles.container}>
+      {/* toggle buttons */}
       <View style={styles.toggleContainer}>
         <TouchableOpacity
           style={[styles.toggleButton, isLogin && styles.activeToggle]}
@@ -47,34 +49,40 @@ export default function LoginForm({ onLogin, onRegister, loading }) {
         </TouchableOpacity>
       </View>
 
+      {/* form fields */}
       <View style={styles.form}>
+        {!isLogin && (
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+        )}
         <TextInput
           style={styles.input}
           placeholder="Username"
+          autoCapitalize="none"
           value={username}
           onChangeText={setUsername}
-          autoCapitalize="none"
-          autoCorrect={false}
         />
-        
         <TextInput
           style={styles.input}
           placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
           secureTextEntry
           autoCapitalize="none"
-          autoCorrect={false}
+          value={password}
+          onChangeText={setPassword}
         />
-
         {!isLogin && (
           <TextInput
             style={styles.input}
             placeholder="Admin Secret (optional)"
+            autoCapitalize="none"
             value={adminSecret}
             onChangeText={setAdminSecret}
-            autoCapitalize="none"
-            autoCorrect={false}
           />
         )}
 

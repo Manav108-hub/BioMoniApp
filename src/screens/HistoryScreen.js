@@ -21,8 +21,8 @@ export default function HistoryScreen() {
 
   const loadLogs = async () => {
     try {
-      const logsData = await ApiService.getSpeciesLogs();
-      setLogs(logsData);
+      const { species_logs } = await ApiService.getSpeciesLogs();
+      setLogs(species_logs);
     } catch (error) {
       console.error('Error loading logs:', error);
       Alert.alert('Error', 'Failed to load observation history');
@@ -53,7 +53,7 @@ export default function HistoryScreen() {
           {logs.length} observation{logs.length !== 1 ? 's' : ''} recorded
         </Text>
       </View>
-      
+
       <ScrollView
         style={styles.scrollView}
         refreshControl={
