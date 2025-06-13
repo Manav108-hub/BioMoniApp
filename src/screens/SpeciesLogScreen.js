@@ -1,3 +1,5 @@
+// src/screens/SpeciesLogScreen.js
+
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -7,67 +9,146 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
-import SpeciesForm from '../components/SpeciesForm';
+import { useNavigation } from '@react-navigation/native';
+
 import ApiService from '../services/api';
+import SpeciesDetailsForm from '../components/SpeciesDetailForm'; // Ensure correct import
+import QuestionnaireForm from '../components/QuestionnaireForm';
 
 export default function SpeciesLogScreen() {
+  const navigation = useNavigation();
+
   const [species, setSpecies] = useState([]);
-  const [questions, setQuestions] = useState([]);    // <-- array state
+  const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [step, setStep] = useState(1);
+  const [speciesLogDetails, setSpeciesLogDetails] = useState(null);
 
   useEffect(() => {
-    loadData();
+    fetchInitialData();
   }, []);
 
-  const loadData = async () => {
+  const fetchInitialData = async () => {
     try {
-      const { species: speciesArray }   = await ApiService.getSpecies();
-      const { questions: questionsArr } = await ApiService.getQuestions();
-      setSpecies(speciesArray);
-      setQuestions(questionsArr);       // <-- set the array
+      const speciesResponse = await ApiService.getSpecies();
+      const questionsResponse = await ApiService.getQuestions();
+
+      setSpecies(speciesResponse?.species || []);
+      setQuestions(questionsResponse?.questions || []);
     } catch (error) {
-      console.error('Error loading data:', error);
-      Alert.alert('Error', 'Failed to load form data');
+      console.error('Error fetching initial data:', error);
+      Alert.alert('Error', 'Failed to load form data. Please check your network and backend.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSubmit = async (logData) => {
+  const handleDetailsSubmit = async (details) => {
+    setLoading(true);
+
     try {
-      await ApiService.createSpeciesLog(logData);
-      Alert.alert('Success', 'Species observation logged successfully!');
+      // If it's a new species
+      if (details.new_species_name) {
+        const newSpecies = await ApiService.createSpecies(
+          details.new_species_name,
+          details.new_species_scientific_name || '',
+          details.new_species_category || ''
+        );
+
+        details.species_id = newSpecies.species.id;
+        delete details.new_species_name;
+        delete details.new_species_scientific_name;
+        delete details.new_species_category;
+
+        // Refresh species list after adding new species
+        const refreshed = await ApiService.getSpecies();
+        setSpecies(refreshed?.species || []);
+      }
+
+      setSpeciesLogDetails(details);
+      setStep(2);
     } catch (error) {
-      console.error('Error submitting log:', error);
-      Alert.alert('Error', 'Failed to submit observation');
+      console.error('Error during species creation or step transition:', error);
+      Alert.alert('Error', 'Failed to proceed. Please try again.');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleQuestionsSubmit = async (answers) => {
+    if (!speciesLogDetails) {
+      Alert.alert('Error', 'Please complete species details first.');
+      return;
+    }
+
+    try {
+      const payload = {
+        species_id: speciesLogDetails.species_id,
+        location_name: speciesLogDetails.location_name,
+        latitude: speciesLogDetails.latitude,
+        longitude: speciesLogDetails.longitude,
+        notes: speciesLogDetails.notes,
+        image: speciesLogDetails.image,
+        answers: answers,
+      };
+
+      console.log('Submitting payload:', payload);
+
+      await ApiService.createSpeciesLog(payload);
+
+      Alert.alert('Success', 'Observation logged successfully!', [
+        { text: 'OK', onPress: () => navigation.navigate('Home') }
+      ]);
+
+      resetForm();
+    } catch (error) {
+      console.error('Error submitting observation log:', error);
+      Alert.alert('Error', 'Failed to submit observation. Please try again.');
+    }
+  };
+
+  const resetForm = () => {
+    setStep(1);
+    setSpeciesLogDetails(null);
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Loading form...</Text>
+        <ActivityIndicator size="large" color="#2e7d32" />
+        <Text style={styles.loadingText}>Loading form data...</Text>
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
+      <ScrollView style={styles.scrollView} contentContainerStyle={{ flexGrow: 1 }}>
         <View style={styles.header}>
           <Text style={styles.title}>Log Species Observation</Text>
           <Text style={styles.subtitle}>Record your wildlife sighting</Text>
         </View>
-        
-        <SpeciesForm
-          species={species}
-          questions={questions}
-          onSubmit={handleSubmit}
-        />
+
+        {step === 1 && (
+          <SpeciesDetailsForm
+            species={species}
+            onSubmitDetails={handleDetailsSubmit}
+            onCancel={() => navigation.goBack()}
+          />
+        )}
+
+        {step === 2 && (
+          <QuestionnaireForm
+            questions={questions}
+            onSubmitQuestions={handleQuestionsSubmit}
+            onBack={() => setStep(1)}
+          />
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -80,11 +161,6 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   header: {
     padding: 20,
@@ -100,5 +176,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
     marginTop: 5,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#666',
   },
 });

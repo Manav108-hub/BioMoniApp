@@ -1,3 +1,4 @@
+// components/HistoryList.js
 import React from 'react';
 import {
   View,
@@ -13,23 +14,27 @@ export default function HistoryList({ logs }) {
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
+      year:   'numeric',
+      month:  'short',
+      day:    'numeric',
+      hour:   '2-digit',
       minute: '2-digit',
     });
   };
 
   const handleLogPress = (log) => {
-    const answers = log.answers || {};
-    const answersText = Object.entries(answers)
-      .map(([key, value]) => `${key}: ${value}`)
+    // answers is an array of objects: { question_text, answer_text, … }
+    const answersArray = Array.isArray(log.answers) ? log.answers : [];
+    const answersText = answersArray
+      .map(a => `• ${a.question_text}: ${a.answer_text}`)
       .join('\n');
 
     Alert.alert(
       'Observation Details',
-      `Species: ${log.species.common_name}\nLocation: ${log.location_name}\nDate: ${formatDate(log.created_at)}\n\nAnswers:\n${answersText}`,
+      `Species: ${log.species_name || 'Unknown'}\n` +
+      `Location: ${log.location_name || 'N/A'}\n` +
+      `Date: ${formatDate(log.created_at)}\n\n` +
+      `Answers:\n${answersText}`,
       [{ text: 'OK' }]
     );
   };
@@ -57,16 +62,18 @@ export default function HistoryList({ logs }) {
           <View style={styles.logContent}>
             <View style={styles.logHeader}>
               <Text style={styles.speciesName}>
-                {log.species.common_name}
+                {log.species_name || 'Unknown'}
               </Text>
               <Text style={styles.scientificName}>
-                {log.species.scientific_name}
+                {log.scientific_name || ''}
               </Text>
             </View>
             <View style={styles.logDetails}>
               <View style={styles.detailRow}>
                 <Icon name="location-on" size={16} color="#666" />
-                <Text style={styles.detailText}>{log.location_name}</Text>
+                <Text style={styles.detailText}>
+                  {log.location_name || 'N/A'}
+                </Text>
               </View>
               <View style={styles.detailRow}>
                 <Icon name="schedule" size={16} color="#666" />

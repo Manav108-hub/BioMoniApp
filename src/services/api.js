@@ -1,20 +1,25 @@
-import { getToken } from '../utils/storage';
+import {
+  getToken,
+  setToken,
+  clearToken,
+  getUser,
+  setUser,
+  clearUser,
+} from '../utils/storage';
 
-const BASE_URL = 'http://10.0.2.2:8000';  // emulator → localhost alias
+const BASE_URL = 'http://10.0.2.2:8000'; // Android emulator localhost
 
 class ApiService {
   async makeRequest(endpoint, { method = 'GET', headers = {}, body = null } = {}) {
     const token = await getToken();
     const url = `${BASE_URL}${endpoint}`;
 
-    // merge headers
     const finalHeaders = { ...headers };
     if (token) {
       finalHeaders.Authorization = `Bearer ${token}`;
     }
-    // stringify JSON bodies
-    const payload =
-      body && !(body instanceof FormData) ? JSON.stringify(body) : body;
+
+    const payload = body && !(body instanceof FormData) ? JSON.stringify(body) : body;
 
     const res = await fetch(url, {
       method,
@@ -24,34 +29,55 @@ class ApiService {
       body: payload,
     });
 
-    const data = await res.json().catch(() => null);
+    const contentType = res.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const data = isJson ? await res.json().catch(() => null) : null;
+
     if (!res.ok) {
-      console.error('API error', endpoint, res.status, data);
+      console.error('API Error:', res.status, endpoint, data);
       throw new Error(data?.detail || data?.message || 'Request failed');
     }
+
     return data;
   }
 
-  // ── Authentication ────────────────────────────────────────────────────────
+  // ── Authentication ────────────────────────────────
 
   async login(username, password) {
-    // your FastAPI login expects JSON (not form)
-    return this.makeRequest('/login', {
+    const response = await this.makeRequest('/login', {
       method: 'POST',
       body: { username, password },
     });
+
+    if (response?.access_token) {
+      await setToken(response.access_token);
+      await setUser(response.user);
+    }
+
+    return response;
   }
 
- async register(username, email, password, adminSecret = null) {
-  const headers = {};
-  if (adminSecret) {headers['x-admin-secret'] = adminSecret;}
+  async register(username, email, password, isAdmin = false, adminSecret = null) {
+    const headers = adminSecret ? { 'X-Admin-Secret': adminSecret } : {};
 
-  return this.makeRequest('/register', {
-    method: 'POST',
-    headers,
-    body: { username, email, password },
-  });
-}
+    const response = await this.makeRequest('/register', {
+      method: 'POST',
+      headers,
+      body: { username, email, password, is_admin: isAdmin },
+    });
+
+    if (response?.access_token) {
+      await setToken(response.access_token);
+      await setUser(response.user);
+    }
+
+    return response;
+  }
+
+  async logout() {
+    await clearToken();
+    await clearUser();
+  }
 
   async getProfile() {
     return this.makeRequest('/profile');
@@ -61,66 +87,100 @@ class ApiService {
     return this.makeRequest('/stats');
   }
 
-  // ── Species ───────────────────────────────────────────────────────────────
+  // ── Species ───────────────────────────────────────
 
   async getSpecies() {
     return this.makeRequest('/species');
   }
-  async createSpecies(data) {
-    // your create_species route expects form-data fields:
-    const form = new FormData();
-    form.append('name', data.name);
-    form.append('scientific_name', data.scientific_name || '');
-    form.append('category', data.category);
-    form.append('description', data.description || '');
+
+  async createSpecies(name, scientific_name, category, description = '') {
+    const formData = new FormData();
+    formData.append('name', name);
+    formData.append('scientific_name', scientific_name || '');
+    formData.append('category', category);
+    formData.append('description', description);
+
     return this.makeRequest('/species', {
       method: 'POST',
-      body: form,
+      body: formData,
     });
   }
 
-  // ── Questions ─────────────────────────────────────────────────────────────
+  // ── Questions ─────────────────────────────────────
 
   async getQuestions() {
     return this.makeRequest('/questions');
   }
-  async createQuestion(q) {
+
+  async createQuestion(questionObject) {
     return this.makeRequest('/questions', {
       method: 'POST',
-      body: q, // JSON matches pydantic model
+      body: questionObject,
     });
   }
 
-  // ── Logs ─────────────────────────────────────────────────────────────────
+  // ── Species Logs ──────────────────────────────────
 
   async createSpeciesLog(logData) {
-    const form = new FormData();
-    form.append('species_log', JSON.stringify({
+    const formData = new FormData();
+
+    const speciesLogJson = JSON.stringify({
       species_id: logData.species_id,
       location_latitude: logData.latitude,
       location_longitude: logData.longitude,
       location_name: logData.location_name,
       notes: logData.notes,
       answers: logData.answers,
-    }));
-    if (logData.image) {
-      form.append('photo', {
+    });
+
+    formData.append('species_log', speciesLogJson);
+
+    if (logData.image?.uri) {
+      formData.append('photo', {
         uri: logData.image.uri,
-        type: logData.image.type,
-        name: logData.image.fileName,
+        name: logData.image.fileName || 'photo.jpg',
+        type: logData.image.type || 'image/jpeg',
       });
     }
+
     return this.makeRequest('/species-logs', {
       method: 'POST',
-      body: form,
+      body: formData,
     });
   }
 
   async getSpeciesLogs() {
     return this.makeRequest('/species-logs');
   }
+
   async getSpeciesLog(id) {
     return this.makeRequest(`/species-logs/${id}`);
+  }
+
+  // ── Admin Endpoints ───────────────────────────────
+
+  async getAllUsers() {
+    return this.makeRequest('/admin/users');
+  }
+
+  async getAllSpeciesLogs() {
+    return this.makeRequest('/admin/all-logs');
+  }
+
+  async exportCsv() {
+    const token = await getToken();
+    const response = await fetch(`${BASE_URL}/admin/export-csv`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Export CSV Error: ${response.status} - ${errorText}`);
+      throw new Error(`Failed to export CSV: ${errorText}`);
+    }
+
+    return response.blob(); // The blob can be used for file downloads
   }
 }
 

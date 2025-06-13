@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const TOKEN_KEY = 'biodiversity_token';
 const USER_KEY = 'biodiversity_user';
 
-export const saveToken = async (token) => {
+export const setToken = async (token) => {
   try {
     await AsyncStorage.setItem(TOKEN_KEY, token);
   } catch (error) {
@@ -20,7 +20,7 @@ export const getToken = async () => {
   }
 };
 
-export const removeToken = async () => {
+export const clearToken = async () => {
   try {
     await AsyncStorage.removeItem(TOKEN_KEY);
     await AsyncStorage.removeItem(USER_KEY);
@@ -29,7 +29,7 @@ export const removeToken = async () => {
   }
 };
 
-export const saveUser = async (user) => {
+export const setUser = async (user) => {
   try {
     await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
   } catch (error) {
@@ -44,5 +44,13 @@ export const getUser = async () => {
   } catch (error) {
     console.error('Error getting user:', error);
     return null;
+  }
+};
+
+export const clearUser = async () => {
+  try {
+    await AsyncStorage.removeItem(USER_KEY);
+  } catch (error) {
+    console.error('Error clearing user:', error);
   }
 };
