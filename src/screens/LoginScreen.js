@@ -10,28 +10,28 @@ import {
 } from 'react-native';
 import LoginForm from '../components/LoginForm';
 import ApiService from '../services/api';
-import { saveToken, saveUser } from '../utils/storage';
+import { setToken, setUser } from '../utils/storage';
 
 export default function LoginScreen({ onLogin }) {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (username, password) => {
-    setLoading(true);
-    try {
-      const response = await ApiService.login(username, password);
-      await saveToken(response.access_token);
+  setLoading(true);
+  try {
+    const response = await ApiService.login(username, password);
+    await setToken(response.access_token);
+    const profile = await ApiService.getProfile();
+    await setUser(profile);
 
-      const profile = await ApiService.getProfile();
-      await saveUser(profile);
+    Alert.alert('Success', 'Logged in successfully!');
+    onLogin(); // ⬅️ updates isLoggedIn in App.js
+  } catch (error) {
+    Alert.alert('Login Failed', error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
-      Alert.alert('Success', 'Logged in successfully!');
-      onLogin();
-    } catch (error) {
-      Alert.alert('Login Failed', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleRegister = async (username, email, password, adminSecret) => {
     setLoading(true);

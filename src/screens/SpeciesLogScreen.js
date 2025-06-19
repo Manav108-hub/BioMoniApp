@@ -10,17 +10,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import ApiService from '../services/api';
-import SpeciesDetailsForm from '../components/SpeciesDetailForm'; // Ensure correct import
+import SpeciesDetailsForm from '../components/SpeciesDetailForm';
 import QuestionnaireForm from '../components/QuestionnaireForm';
 
 export default function SpeciesLogScreen() {
   const navigation = useNavigation();
 
   const [species, setSpecies] = useState([]);
+  const [speciesImages, setSpeciesImages] = useState({});
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(1);
@@ -34,9 +36,16 @@ export default function SpeciesLogScreen() {
     try {
       const speciesResponse = await ApiService.getSpecies();
       const questionsResponse = await ApiService.getQuestions();
+      const imageResponse = await ApiService.makeRequest('/public/species-images');
+
+      const imageMap = {};
+      imageResponse.forEach(item => {
+        imageMap[item.species_id] = item.photo_path;
+      });
 
       setSpecies(speciesResponse?.species || []);
       setQuestions(questionsResponse?.questions || []);
+      setSpeciesImages(imageMap);
     } catch (error) {
       console.error('Error fetching initial data:', error);
       Alert.alert('Error', 'Failed to load form data. Please check your network and backend.');
@@ -49,7 +58,6 @@ export default function SpeciesLogScreen() {
     setLoading(true);
 
     try {
-      // If it's a new species
       if (details.new_species_name) {
         const newSpecies = await ApiService.createSpecies(
           details.new_species_name,
@@ -62,7 +70,6 @@ export default function SpeciesLogScreen() {
         delete details.new_species_scientific_name;
         delete details.new_species_category;
 
-        // Refresh species list after adding new species
         const refreshed = await ApiService.getSpecies();
         setSpecies(refreshed?.species || []);
       }
@@ -137,6 +144,7 @@ export default function SpeciesLogScreen() {
         {step === 1 && (
           <SpeciesDetailsForm
             species={species}
+            speciesImages={speciesImages}
             onSubmitDetails={handleDetailsSubmit}
             onCancel={() => navigation.goBack()}
           />

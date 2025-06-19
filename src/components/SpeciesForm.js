@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,14 +8,15 @@ import {
   Alert,
   Image,
   ActivityIndicator,
-  Platform, // Import Platform for OS-specific permissions
-  PermissionsAndroid, // Import PermissionsAndroid for Android location permissions
+  Platform,
+  PermissionsAndroid,
 } from 'react-native';
-import {launchImageLibrary} from 'react-native-image-picker';
+import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import Geolocation from 'react-native-geolocation-service'; // Import Geolocation service
+import Geolocation from 'react-native-geolocation-service';
+import ApiService from '../services/api';
 
-export default function SpeciesForm({species, questions, onSubmit}) {
+export default function SpeciesForm({ species, questions, onSubmit }) {
   const [selectedSpecies, setSelectedSpecies] = useState('');
   const [locationName, setLocationName] = useState('');
   const [latitude, setLatitude] = useState('');
@@ -23,7 +24,25 @@ export default function SpeciesForm({species, questions, onSubmit}) {
   const [answers, setAnswers] = useState({});
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [locationLoading, setLocationLoading] = useState(false); // New state for location loading
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [speciesImages, setSpeciesImages] = useState({});
+
+  useEffect(() => {
+    const fetchImages = async () => {
+      try {
+        const response = await ApiService.makeRequest('/public/species-images');
+        const imageMap = {};
+        response.forEach(item => {
+          imageMap[item.species_id] = item.photo_path;
+        });
+        setSpeciesImages(imageMap);
+      } catch (error) {
+        console.error('Error fetching species images:', error);
+      }
+    };
+
+    fetchImages();
+  }, []);
 
   const handleImagePick = () => {
     const options = {
@@ -34,9 +53,7 @@ export default function SpeciesForm({species, questions, onSubmit}) {
     };
 
     launchImageLibrary(options, response => {
-      if (response.didCancel || response.error) {
-        return;
-      }
+      if (response.didCancel || response.error) return;
       if (response.assets && response.assets[0]) {
         setImage(response.assets[0]);
       }
@@ -44,35 +61,23 @@ export default function SpeciesForm({species, questions, onSubmit}) {
   };
 
   const handleAnswerChange = (questionId, value) => {
-    setAnswers(prev => ({...prev, [questionId]: value}));
+    setAnswers(prev => ({ ...prev, [questionId]: value }));
   };
 
-  // NEW: Function to get current location
   const handleGetLocation = async () => {
     setLocationLoading(true);
     try {
       if (Platform.OS === 'android') {
         const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message:
-              'This app needs access to your location to automatically log coordinates.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          },
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
         );
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          // Permission granted
-        } else {
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           Alert.alert('Permission Denied', 'Location permission denied.');
           setLocationLoading(false);
           return;
         }
       }
 
-      // Get current position
       Geolocation.getCurrentPosition(
         position => {
           setLatitude(position.coords.latitude.toString());
@@ -81,17 +86,12 @@ export default function SpeciesForm({species, questions, onSubmit}) {
         },
         error => {
           Alert.alert('Location Error', error.message);
-          console.error('Location Error:', error);
           setLocationLoading(false);
         },
-        {enableHighAccuracy: true, timeout: 15000, maximumAge: 10000},
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
     } catch (err) {
-      console.warn(err);
-      Alert.alert(
-        'Location Error',
-        'An error occurred while getting location.',
-      );
+      Alert.alert('Location Error', 'An error occurred while getting location.');
       setLocationLoading(false);
     }
   };
@@ -115,7 +115,6 @@ export default function SpeciesForm({species, questions, onSubmit}) {
 
       await onSubmit(logData);
 
-      // Reset form
       setSelectedSpecies('');
       setLocationName('');
       setLatitude('');
@@ -123,7 +122,6 @@ export default function SpeciesForm({species, questions, onSubmit}) {
       setAnswers({});
       setImage(null);
     } catch (error) {
-      console.error('Error submitting form:', error);
       Alert.alert('Error', 'Could not submit observation');
     } finally {
       setLoading(false);
@@ -148,8 +146,7 @@ export default function SpeciesForm({species, questions, onSubmit}) {
                   <Text
                     style={[
                       styles.optionText,
-                      answers[question.id] === option &&
-                        styles.selectedOptionText,
+                      answers[question.id] === option && styles.selectedOptionText,
                     ]}>
                     {option}
                   </Text>
@@ -244,12 +241,18 @@ export default function SpeciesForm({species, questions, onSubmit}) {
               <Text
                 style={[
                   styles.speciesText,
-                  selectedSpecies === s.id.toString() &&
-                    styles.selectedSpeciesText,
+                  selectedSpecies === s.id.toString() && styles.selectedSpeciesText,
                 ]}>
-                {s.common_name}
+                {s.name}
               </Text>
               <Text style={styles.scientificName}>{s.scientific_name}</Text>
+              {speciesImages[s.id] && (
+                <Image
+                  source={{ uri: speciesImages[s.id] }}
+                  style={{ width: 60, height: 60, borderRadius: 8, marginTop: 8 }}
+                  resizeMode="cover"
+                />
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -266,7 +269,7 @@ export default function SpeciesForm({species, questions, onSubmit}) {
             placeholder="Enter location name"
           />
         </View>
-        <View style={[styles.coordinatesRow]}>
+        <View style={styles.coordinatesRow}>
           <View style={styles.coordinateField}>
             <Text style={styles.fieldLabel}>Latitude</Text>
             <TextInput
@@ -288,12 +291,8 @@ export default function SpeciesForm({species, questions, onSubmit}) {
             />
           </View>
         </View>
-        {/* NEW: Log Current Location Button */}
         <TouchableOpacity
-          style={[
-            styles.locationButton,
-            locationLoading && styles.disabledButton,
-          ]}
+          style={[styles.locationButton, locationLoading && styles.disabledButton]}
           onPress={handleGetLocation}
           disabled={locationLoading}>
           {locationLoading ? (
@@ -301,9 +300,7 @@ export default function SpeciesForm({species, questions, onSubmit}) {
           ) : (
             <>
               <Icon name="my-location" size={20} color="#fff" />
-              <Text style={styles.locationButtonText}>
-                Get Current Location
-              </Text>
+              <Text style={styles.locationButtonText}>Get Current Location</Text>
             </>
           )}
         </TouchableOpacity>
@@ -313,7 +310,7 @@ export default function SpeciesForm({species, questions, onSubmit}) {
         <Text style={styles.sectionTitle}>Photo</Text>
         <TouchableOpacity style={styles.imageButton} onPress={handleImagePick}>
           {image ? (
-            <Image source={{uri: image.uri}} style={styles.selectedImage} />
+            <Image source={{ uri: image.uri }} style={styles.selectedImage} />
           ) : (
             <View style={styles.imagePlaceholder}>
               <Icon name="photo-camera" size={30} color="#666" />
@@ -341,6 +338,7 @@ export default function SpeciesForm({species, questions, onSubmit}) {
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {flex: 1, padding: 15},

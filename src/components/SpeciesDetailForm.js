@@ -1,5 +1,5 @@
 // src/components/SpeciesDetailsForm.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,14 +11,16 @@ import {
   ActivityIndicator,
   Platform,
   PermissionsAndroid,
+  ScrollView,
 } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import Geolocation from 'react-native-geolocation-service';
+import ApiService from '../services/api';
 
 export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel }) {
-  const [selectedSpeciesId, setSelectedSpeciesId] = useState(''); // Stores ID of existing species
-  const [useNewSpecies, setUseNewSpecies] = useState(false); // Toggle for new species input
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState('');
+  const [useNewSpecies, setUseNewSpecies] = useState(false);
   const [newSpeciesCommonName, setNewSpeciesCommonName] = useState('');
   const [newSpeciesScientificName, setNewSpeciesScientificName] = useState('');
   const [newSpeciesCategory, setNewSpeciesCategory] = useState('');
@@ -30,6 +32,24 @@ export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel 
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [speciesImages, setSpeciesImages] = useState({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await ApiService.makeRequest('/public/species-images');
+        const imageMap = {};
+        res.forEach(item => {
+          if (item.species_id && item.photo_path) {
+            imageMap[item.species_id] = item.photo_path;
+          }
+        });
+        setSpeciesImages(imageMap);
+      } catch (error) {
+        console.error('Error fetching species images:', error);
+      }
+    })();
+  }, []);
 
   const handleImagePick = () => {
     const options = {
@@ -40,7 +60,7 @@ export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel 
     };
 
     launchImageLibrary(options, (response) => {
-      if (response.didCancel || response.error) { return; }
+      if (response.didCancel || response.error) return;
       if (response.assets && response.assets[0]) {
         setImage(response.assets[0]);
       }
@@ -55,15 +75,13 @@ export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel 
           PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
           {
             title: 'Location Permission',
-            message: 'This app needs access to your location to automatically log coordinates.',
+            message: 'This app needs access to your location.',
             buttonNeutral: 'Ask Me Later',
             buttonNegative: 'Cancel',
             buttonPositive: 'OK',
           },
         );
-        if (granted === PermissionsAndroid.RESULTS.GRANTED) {
-          // Permission granted
-        } else {
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           Alert.alert('Permission Denied', 'Location permission denied.');
           setLocationLoading(false);
           return;
@@ -83,55 +101,52 @@ export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel 
         },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
       );
-
     } catch (err) {
       console.warn(err);
-      Alert.alert('Location Error', 'An error occurred while getting location.');
+      Alert.alert('Location Error', 'Error getting location.');
       setLocationLoading(false);
     }
   };
 
   const handleNext = async () => {
-    // Validate based on whether adding new species or selecting existing
     if (useNewSpecies) {
       if (!newSpeciesCommonName || !newSpeciesCategory || !locationName) {
-        Alert.alert('Error', 'Please fill in New Species Common Name, Category, and Location Name.');
+        Alert.alert('Error', 'Fill New Species Common Name, Category, and Location Name.');
         return;
       }
-    } else { // Using existing species
+    } else {
       if (!selectedSpeciesId || !locationName) {
-        Alert.alert('Error', 'Please select an existing species and fill in the Location Name.');
+        Alert.alert('Error', 'Select a species and fill Location Name.');
         return;
       }
     }
 
-    setLoading(true); // Start loading indicator for this component's submission
+    setLoading(true);
     try {
-        const details = {
-            location_name: locationName,
-            latitude: parseFloat(latitude) || 0,
-            longitude: parseFloat(longitude) || 0,
-            notes: notes,
-            image: image,
-        };
+      const details = {
+        location_name: locationName,
+        latitude: parseFloat(latitude) || 0,
+        longitude: parseFloat(longitude) || 0,
+        notes,
+        image,
+      };
 
-        if (useNewSpecies) {
-            details.new_species_name = newSpeciesCommonName;
-            details.new_species_scientific_name = newSpeciesScientificName;
-            details.new_species_category = newSpeciesCategory;
-        } else {
-            details.species_id = parseInt(selectedSpeciesId, 10);
-        }
+      if (useNewSpecies) {
+        details.new_species_name = newSpeciesCommonName;
+        details.new_species_scientific_name = newSpeciesScientificName;
+        details.new_species_category = newSpeciesCategory;
+      } else {
+        details.species_id = parseInt(selectedSpeciesId, 10);
+      }
 
-        onSubmitDetails(details); // Pass all details to the parent screen
+      onSubmitDetails(details);
     } finally {
-        setLoading(false); // Stop loading indicator regardless of success/failure
+      setLoading(false);
     }
   };
 
   return (
-    <View style={styles.container}>
-      {/* Species Selection/Creation Section */}
+    <ScrollView style={styles.container}>
       <View style={styles.formSection}>
         <Text style={styles.sectionTitle}>Species</Text>
         <View style={styles.toggleContainer}>
@@ -144,7 +159,7 @@ export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel 
               setNewSpeciesCategory('');
             }}>
             <Text style={[styles.toggleButtonText, !useNewSpecies && styles.toggleButtonTextActive]}>
-              Select Existing Species
+              Select Existing
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -154,129 +169,104 @@ export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel 
               setSelectedSpeciesId('');
             }}>
             <Text style={[styles.toggleButtonText, useNewSpecies && styles.toggleButtonTextActive]}>
-              Add New Species
+              Add New
             </Text>
           </TouchableOpacity>
         </View>
 
         {useNewSpecies ? (
-          <View style={styles.newSpeciesInputContainer}>
-            <Text style={styles.fieldLabel}>Common Name*</Text>
+          <View>
             <TextInput
               style={styles.input}
+              placeholder="Common Name*"
               value={newSpeciesCommonName}
               onChangeText={setNewSpeciesCommonName}
-              placeholder="e.g., Bengal Tiger"
             />
-            <Text style={styles.fieldLabel}>Scientific Name</Text>
             <TextInput
               style={styles.input}
+              placeholder="Scientific Name"
               value={newSpeciesScientificName}
               onChangeText={setNewSpeciesScientificName}
-              placeholder="e.g., Panthera tigris tigris"
             />
-            <Text style={styles.fieldLabel}>Category*</Text>
             <TextInput
               style={styles.input}
+              placeholder="Category*"
               value={newSpeciesCategory}
               onChangeText={setNewSpeciesCategory}
-              placeholder="e.g., Mammal, Reptile, Bird"
             />
           </View>
         ) : (
-          <View style={styles.speciesContainer}>
-            {species.length > 0 ? (
-              species.map((s) => (
-                <TouchableOpacity
-                  key={s.id}
-                  style={[
-                    styles.speciesButton,
-                    selectedSpeciesId === s.id.toString() && styles.selectedSpecies,
-                  ]}
-                  onPress={() => setSelectedSpeciesId(s.id.toString())}
-                >
-                  <Text
-                    style={[
-                      styles.speciesText,
-                      selectedSpeciesId === s.id.toString() && styles.selectedSpeciesText,
-                    ]}
-                  >
-                    {s.common_name}
-                  </Text>
-                  <Text style={styles.scientificName}>{s.scientific_name}</Text>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <Text style={styles.noDataText}>No existing species available. Try adding a new one.</Text>
-            )}
+          <View>
+            {species.map((s) => (
+              <TouchableOpacity
+                key={s.id}
+                style={[styles.speciesButton, selectedSpeciesId === s.id.toString() && styles.selectedSpecies]}
+                onPress={() => setSelectedSpeciesId(s.id.toString())}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  {speciesImages[s.id] && (
+                    <Image source={{ uri: speciesImages[s.id] }} style={styles.speciesThumb} />
+                  )}
+                  <View>
+                    <Text style={styles.speciesText}>{s.name}</Text>
+                    <Text style={styles.scientificName}>{s.scientific_name}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
       </View>
 
-      {/* Location Details Section */}
       <View style={styles.formSection}>
-        <Text style={styles.sectionTitle}>Location Details</Text>
-        <View style={styles.fieldContainer}>
-          <Text style={styles.fieldLabel}>Location Name*</Text>
+        <Text style={styles.sectionTitle}>Location</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Location Name*"
+          value={locationName}
+          onChangeText={setLocationName}
+        />
+        <View style={styles.coordinatesRow}>
           <TextInput
-            style={styles.input}
-            value={locationName}
-            onChangeText={setLocationName}
-            placeholder="Enter location name"
+            style={[styles.input, { flex: 1, marginRight: 8 }]}
+            placeholder="Latitude"
+            value={latitude}
+            onChangeText={setLatitude}
+            keyboardType="numeric"
           />
-        </View>
-        <View style={[styles.coordinatesRow]}>
-          <View style={styles.coordinateField}>
-            <Text style={styles.fieldLabel}>Latitude</Text>
-            <TextInput
-              style={styles.input}
-              value={latitude}
-              onChangeText={setLatitude}
-              keyboardType="numeric"
-              placeholder="Latitude"
-            />
-          </View>
-          <View style={styles.coordinateField}>
-            <Text style={styles.fieldLabel}>Longitude</Text>
-            <TextInput
-              style={styles.input}
-              value={longitude}
-              onChangeText={setLongitude}
-              keyboardType="numeric"
-              placeholder="Longitude"
-            />
-          </View>
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Longitude"
+            value={longitude}
+            onChangeText={setLongitude}
+            keyboardType="numeric"
+          />
         </View>
         <TouchableOpacity
           style={[styles.locationButton, locationLoading && styles.disabledButton]}
           onPress={handleGetLocation}
           disabled={locationLoading}
         >
-          {locationLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
+          {locationLoading ? <ActivityIndicator color="#fff" /> : (
             <>
               <Icon name="my-location" size={20} color="#fff" />
-              <Text style={styles.locationButtonText}>Get Current Location</Text>
+              <Text style={styles.locationButtonText}>Get Location</Text>
             </>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* Additional Notes Section */}
       <View style={styles.formSection}>
-        <Text style={styles.sectionTitle}>Additional Notes</Text>
+        <Text style={styles.sectionTitle}>Notes</Text>
         <TextInput
           style={styles.textInput}
           multiline
-          numberOfLines={4}
           value={notes}
           onChangeText={setNotes}
-          placeholder="Add any additional observations or notes..."
+          placeholder="Observation notes..."
         />
       </View>
 
-      {/* Photo Section */}
       <View style={styles.formSection}>
         <Text style={styles.sectionTitle}>Photo</Text>
         <TouchableOpacity style={styles.imageButton} onPress={handleImagePick}>
@@ -296,160 +286,104 @@ export default function SpeciesDetailsForm({ species, onSubmitDetails, onCancel 
         onPress={handleNext}
         disabled={loading}
       >
-        {loading
-          ? <ActivityIndicator color="#fff" />
-          : <Text style={styles.submitButtonText}>Continue to Questions</Text>}
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitButtonText}>Continue</Text>}
       </TouchableOpacity>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 0, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
   formSection: {
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 20,
-    marginBottom: 15,
-    marginHorizontal: 15,
+    margin: 10,
+    padding: 15,
+    borderRadius: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-  },
-  fieldContainer: { marginBottom: 20 },
-  fieldLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-    marginBottom: 8,
-  },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
-  },
-  speciesContainer: { gap: 10 },
-  speciesButton: {
-    padding: 15,
-    borderWidth: 1,
-    borderColor: '#ddd', // Default border color
-    borderRadius: 8,
-    backgroundColor: '#f9f9f9',
+    borderColor: '#ccc',
+    borderRadius: 6,
+    padding: 10,
+    backgroundColor: '#fff',
     marginBottom: 10,
   },
-  selectedSpecies: {
-    borderColor: '#2e7d32',
-    backgroundColor: '#e8f5e8',
-    borderWidth: 2, // Highlight selected
-  },
-  speciesText: { fontSize: 16, fontWeight: '500', color: '#333' },
-  selectedSpeciesText: { color: '#2e7d32' },
-  scientificName: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    color: '#666',
-    marginTop: 2,
-  },
-  coordinatesRow: { flexDirection: 'row', gap: 15 },
-  coordinateField: { flex: 1 },
-  imageButton: {
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderStyle: 'dashed',
-    borderRadius: 8,
-    padding: 20,
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-  },
-  imagePlaceholder: { alignItems: 'center' },
-  imageButtonText: {
-    marginTop: 8,
-    color: '#666',
-    fontSize: 16,
-  },
-  selectedImage: { width: 100, height: 100, borderRadius: 8 },
   textInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#f9f9f9',
+    borderColor: '#ccc',
+    borderRadius: 6,
+    padding: 10,
+    backgroundColor: '#fff',
+    height: 100,
     textAlignVertical: 'top',
   },
-  submitButton: {
-    backgroundColor: '#2e7d32',
-    padding: 18,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 10,
-    marginHorizontal: 15,
-    marginBottom: 30,
-  },
-  disabledButton: { opacity: 0.6 },
-  submitButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  coordinatesRow: { flexDirection: 'row', marginBottom: 10 },
   locationButton: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#007bff',
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 15,
+    padding: 10,
+    borderRadius: 6,
   },
   locationButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-    marginLeft: 10,
+    marginLeft: 8,
   },
-  noDataText: {
-    fontSize: 15,
-    color: '#888',
-    textAlign: 'center',
-    marginTop: 10,
-  },
-  toggleContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
+  imageButton: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: '#ccc',
     borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    padding: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  imagePlaceholder: { alignItems: 'center' },
+  imageButtonText: { color: '#888', marginTop: 5 },
+  selectedImage: { width: 100, height: 100, borderRadius: 6 },
+  submitButton: {
+    backgroundColor: '#2e7d32',
+    margin: 15,
+    padding: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  submitButtonText: { color: '#fff', fontSize: 18 },
+  disabledButton: { opacity: 0.6 },
+  toggleContainer: { flexDirection: 'row', marginBottom: 10 },
   toggleButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#eee',
   },
   toggleButtonActive: {
     backgroundColor: '#2e7d32',
   },
-  toggleButtonText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
+  toggleButtonText: { fontSize: 14, color: '#333' },
+  toggleButtonTextActive: { color: '#fff', fontWeight: 'bold' },
+  speciesButton: {
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 6,
+    marginBottom: 10,
+    backgroundColor: '#f9f9f9',
   },
-  toggleButtonTextActive: {
-    color: '#fff',
+  selectedSpecies: {
+    borderColor: '#2e7d32',
+    backgroundColor: '#e0f2f1',
   },
-  newSpeciesInputContainer: {
-    marginTop: 10,
-  },
+  speciesText: { fontSize: 16, fontWeight: 'bold' },
+  scientificName: { fontStyle: 'italic', color: '#555' },
+  speciesThumb: { width: 50, height: 50, marginRight: 10, borderRadius: 6 },
 });

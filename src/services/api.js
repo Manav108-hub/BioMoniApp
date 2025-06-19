@@ -106,6 +106,11 @@ class ApiService {
     });
   }
 
+  // ✅ NEW: Public Species Images
+  async getPublicSpeciesImages() {
+    return this.makeRequest('/public/species-images');
+  }
+
   // ── Questions ─────────────────────────────────────
 
   async getQuestions() {
